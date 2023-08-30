@@ -2,9 +2,7 @@ package com.example.autocapture
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.SurfaceTexture
+import android.graphics.*
 import android.hardware.Camera
 import android.net.Uri
 import android.os.Build
@@ -13,13 +11,11 @@ import android.os.Handler
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.example.autocapture.databinding.ActivityMainBinding
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.*
@@ -35,21 +31,19 @@ import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
-    lateinit var img: ImageView
     lateinit var btn: Button
     lateinit var btnFetch: Button
     lateinit var btnStop: Button
 
     lateinit var binding: ActivityMainBinding
     var imgUri: Uri? = null
-    private val recyclerView: RecyclerView? = null
+    var bitmapImage: Bitmap? = null
 
     var handler = Handler()
     var runnable: Runnable? = null
-    var delay = 1000 * 10
+    var delay = 1000 * 60
 
     val baseUrl = "http://10.10.10.157/api/api/"
-    var recyclerviewItemAdapter: RecyclerviewItemAdapter? = null
 
     lateinit var storageReference: StorageReference
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +52,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         val serviceIntent = Intent(this, WorkerClass::class.java)
-        startService(serviceIntent)
+        //   startService(serviceIntent)
         val storage: FirebaseStorage = FirebaseStorage.getInstance()
         storageReference = storage.reference
 
@@ -87,11 +81,11 @@ class MainActivity : AppCompatActivity() {
                     response: Response<ImageResponse>
                 ) {
                     val res: ImageResponse = response.body()!!
-                     recyclerviewItemAdapter = RecyclerviewItemAdapter(res)
-                    recyclerView?.adapter = recyclerviewItemAdapter
-                    recyclerView?.setHasFixedSize(true)
-                    recyclerView?.layoutManager = LinearLayoutManager(this@MainActivity)
-                    Log.d("MYTAG", "onResponse: fetch data " + response.body())
+                    val recyclerviewItemAdapter = RecyclerAdapter(res)
+                    binding.ivFetch.setHasFixedSize(true)
+                    binding.ivFetch.layoutManager = LinearLayoutManager(this@MainActivity)
+                    binding.ivFetch.adapter = recyclerviewItemAdapter
+                    Log.d("MYTAG", "onResponse: fetch data " + res)
                 }
 
                 override fun onFailure(call: Call<ImageResponse>, t: Throwable) {
@@ -106,6 +100,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnStop.setOnClickListener {
             onDestroy()
+            finish()
             Toast.makeText(this, "closed service", Toast.LENGTH_SHORT).show()
         }
 
@@ -117,10 +112,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-     /*   handler.postDelayed(Runnable {
+        handler.postDelayed(Runnable {
             handler.postDelayed(runnable!!, delay.toLong())
             captureFrontPhoto()
-        }.also { runnable = it }, delay.toLong())*/
+        }.also { runnable = it }, delay.toLong())
     }
 
     override fun onDestroy() {
@@ -147,7 +142,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             for (i in 1..10000 / 2000) {
                 toast.show()
-                Thread.sleep(2000)
+                Thread.sleep(1000 * 60 * 2)
                 Log.d("MYYYYYTAG", "mDisplayToast: toast calling...")
                 toast.cancel()
             }
@@ -188,7 +183,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun uploadImage() {
+    fun uploadImage(base64: Bitmap) {
         // firebase data uploaded
         /*      val date = Calendar.getInstance().time
               Log.d("MYTAG", "uploadImage: " + imgUri.toString())
@@ -206,7 +201,6 @@ class MainActivity : AppCompatActivity() {
                       Toast.makeText(this@MainActivity, "Failed", Toast.LENGTH_SHORT).show()
                   }*/
 
-
         //local database upladed
         val retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -216,35 +210,48 @@ class MainActivity : AppCompatActivity() {
         val retrofitAPI: RetrofitApi = retrofit.create(RetrofitApi::class.java)
 
         val date = Calendar.getInstance().time
-        val datamodel = DataModal()
 
         val imageUri: Uri = imgUri!!
         val bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, imageUri)
         Log.d("MYTAG", "uploadImage: image uri " + imageUri)
         Log.d("MYTAG", "uploadImage: bitmap  " + bitmap)
-        val base64 = encodeImage(bitmap)
         Log.d("MYTAG", "uploadImage: base64  " + base64)
+        val image = encodeImage(base64)
+        /* datamodel.date = date.toString()
+         datamodel.image = base64*/
+        retrofitAPI.uploadImage(DataModal(image, date.toString()))
+            .enqueue(object : Callback<UploadResponse> {
+                override fun onResponse(
+                    call: Call<UploadResponse>,
+                    response: Response<UploadResponse>
+                ) {
+                    if (response.isSuccessful) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "succes data" + response.body(),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        Log.d("MYTAG", "onSuccess: upload image " + response.body())
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "erros found" + response.errorBody(),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
 
+                }
 
-        datamodel.date = date.toString()
-        datamodel.image = base64
-        retrofitAPI.uploadImage(datamodel)?.enqueue(object : Callback<String?> {
-            override fun onResponse(call: Call<String?>, response: Response<String?>) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "succes data" + response.message(),
-                    Toast.LENGTH_SHORT
-                ).show()
-                Log.d("MYTAG", "onSuccess: " + response.body())
-
-            }
-
-            override fun onFailure(call: Call<String?>, t: Throwable) {
-                Toast.makeText(this@MainActivity, "error found " + t.message, Toast.LENGTH_SHORT)
-                    .show()
-                Log.d("MYTAG", "onFailure: " + t.message)
-            }
-        })
+                override fun onFailure(call: Call<UploadResponse?>, t: Throwable) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "error found " + t.message,
+                        Toast.LENGTH_SHORT
+                    )
+                        .show()
+                    Log.d("MYTAG", "onFailure: " + t.message)
+                }
+            })
     }
 
     fun captureFrontPhoto() {
@@ -274,23 +281,24 @@ class MainActivity : AppCompatActivity() {
                     e.printStackTrace()
                 }
                 camera.takePicture(null, null, object : Camera.PictureCallback {
+                    @Deprecated("Deprecated in Java")
                     @RequiresApi(Build.VERSION_CODES.O)
                     override fun onPictureTaken(data: ByteArray, camera: Camera) {
                         try {
                             val bmp = BitmapFactory.decodeByteArray(data, 0, data.size)
-                            img.setImageBitmap(bmp)
+                            //  img.setImageBitmap(bmp)
                             imgUri = getImageUri(this@MainActivity, bmp)
                             Log.d("MYTAG", "onPictureTaken: " + imgUri.toString())
-                            uploadImage()
+                            uploadImage(bmp)
                         } catch (e: Exception) {
-                            Log.d("MYTAG", "onPictureTaken: " + e.message)
+                            Log.d("MYTAG", "onPictureTaken: bitmap error " + e.message)
                         }
                         camera.release()
                     }
                 })
             }
         } catch (e: Exception) {
-            Log.d("MYTAG", "onPictureTaken: " + e.message)
+            Log.d("MYTAG", "onPictureTaken: camere error " + e.message)
             camera?.release()
         }
     }
@@ -308,11 +316,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun encodeImage(bm: Bitmap): String? {
+    private fun encodeImage(bm: Bitmap): String {
         val baos = ByteArrayOutputStream()
-        bm.compress(Bitmap.CompressFormat.JPEG, 100, baos)
+        bm.compress(Bitmap.CompressFormat.JPEG, 80, baos)
         val b = baos.toByteArray()
         return Base64.getEncoder().encodeToString(b)
-
     }
 }
