@@ -51,6 +51,12 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="Stop service" />
+        <Button
+            android:id="@+id/btnSignIn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Sign in" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
